@@ -179,17 +179,6 @@ Push the images to your project in Harbor.
 Pushing image to demo.goharbor.io/meetup/moonlight-vuln:1.0.0
 ```
 
-### Install helm
-
-Helm is a package manager for Kubernetes, so it can install and manage software on your cluster.
-
-```bash
-curl https://baltocdn.com/helm/signing.asc | gpg --dearmor | sudo tee /usr/share/keyrings/helm.gpg > /dev/null
-sudo apt-get install apt-transport-https --yes
-echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/helm.gpg] https://baltocdn.com/helm/stable/debian/ all main" | sudo tee /etc/apt/sources.list.d/helm-stable-debian.list
-sudo apt-get update
-sudo apt-get install helm
-```
 
 
 ### Install Kubernetes
@@ -232,8 +221,17 @@ ubuntu   Ready    control-plane   3m49s   v1.29.2
 
 Everything looks good lets continue
 
+### Install helm
 
+Helm is a package manager for Kubernetes, so it can install and manage software on your cluster.
 
+```bash
+curl https://baltocdn.com/helm/signing.asc | gpg --dearmor | sudo tee /usr/share/keyrings/helm.gpg > /dev/null
+sudo apt-get install apt-transport-https --yes
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/helm.gpg] https://baltocdn.com/helm/stable/debian/ all main" | sudo tee /etc/apt/sources.list.d/helm-stable-debian.list
+sudo apt-get update
+sudo apt-get install helm
+```
 
 ### Use Harbor registry
 
@@ -366,7 +364,7 @@ metadata:
   name: pod-not-signed
 spec:
   containers:
-  - image: demo.goharbor.io/meetup/moonlight-vuln:1.0.0
+  - image: demo.goharbor.io/meetup/moonlight:1.0.0
     name: pod-not-signed
 ```
 
@@ -397,8 +395,8 @@ metadata:
   name: pod-not-signed
 spec:
   containers:
-  - image: demo.goharbor.io/meetup/moonlight:1.0.0
-    name: pod-not-signed
+  - image: demo.goharbor.io/meetup/moonlight:2.0.0
+    name: pod-signed
 ```
 
 `moonlight` image is the signed one ,so lets see what is going to happen.
@@ -414,12 +412,7 @@ pod-signed   1/1     Running   0          5s
 As you can see the pod was created successfully. That is how easy it is to enforce policies with `kyverno` and `cosign`.
 Now we can be sure that our running pods are using only signed images.
 
-Thank you.
-
-@Valentin Hristev
-@Orlin Vasilev
-
-## Bonus scanner with trivy
+## Scanner with trivy
 
 
 ### Install trivy
@@ -430,23 +423,6 @@ wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | gpg --dear
 echo "deb [signed-by=/usr/share/keyrings/trivy.gpg] https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main" | sudo tee -a /etc/apt/sources.list.d/trivy.list
 sudo apt-get update
 sudo apt-get install trivy
-```
-
-### Trivy scan image
-
-With `Trivy` we will scan our image:
-
-```bash
-~/kyverno$  trivy image --ignore-unfixed --format cosign-vuln --output scan.json demo.goharbor.io/meetup/moonlight:1.0.0
-```
-
-- --ignore-unfixed: Ensures only the vulnerabilities, which have a already a fix available, are displayed
-- --output scan.json: The scan output is saved to a scan.json file instead of being displayed in the terminal.
-
-### Attack attestation to the image
-
-```bash
-~/kyverno$ cosign attest --key cosign.key --predicate scan.json --type vuln demo.goharbor.io/meetup/moonlight:1.0.0
 ```
 
 ### Kyverno policy for scan check
@@ -494,6 +470,48 @@ spec:
                   -----END PUBLIC KEY-----
 ```
 
+Test with pod
+
+```bash
+~/kyverno$ vim pod-scan.yaml && cat $_
+```
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    run: pod-scanned
+  name: pod-scanned
+spec:
+  containers:
+  - image: demo.goharbor.io/meetup/moonlight:1.0.0
+    name: pod-scanned
+```
+
+```bash
+~/kyverno$ k apply -f pod-scan.yaml
+```
+
+and it fails
+
+### Trivy scan image
+
+
+With `Trivy` we will scan our image:
+
+```bash
+~/kyverno$  trivy image --ignore-unfixed --format cosign-vuln --output scan.json demo.goharbor.io/meetup/moonlight:1.0.0
+```
+
+- --ignore-unfixed: Ensures only the vulnerabilities, which have a already a fix available, are displayed
+- --output scan.json: The scan output is saved to a scan.json file instead of being displayed in the terminal.
+
+### Attack attestation to the image
+
+```bash
+~/kyverno$ cosign attest --key cosign.key --predicate scan.json --type vuln demo.goharbor.io/meetup/moonlight:1.0.0
+```
+
 
 Test with a pod
 
@@ -521,3 +539,9 @@ pod/pod-not-signed created
 ubuntu@ip-172-31-17-242:~/kuverno$ k get pods
 NAME             READY   STATUS    RESTARTS        AGE
 pod-scanned   1/1     Running   3 (9m58s ago)   60m
+```
+
+Thank you.
+
+@Valentin Hristev
+@Orlin Vasilev
