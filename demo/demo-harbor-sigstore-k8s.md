@@ -102,7 +102,7 @@ https://demo.goharbor.io/
 
 Click on Sign Up and fill the form there is no need of verification. Just use the user and the password you have entered.
 
-Create a new project and name it whatever you want. We will name ours `yoda`
+Create a new project and name it whatever you want. We will name ours `meetup`
 
 #### Login to the Harbor
 
@@ -115,15 +115,15 @@ Create a new project and name it whatever you want. We will name ours `yoda`
 Build an image from provided Dockerfile and tag it.
 
 ```
-~$ docker build -t demo.goharbor.io/yoda/moonlight:1.0.0 .
+~$ docker build -t demo.goharbor.io/meetup/moonlight:1.0.0 .
 ```
 
 #### Push it to the Harbor
 
 ```
-~$ docker push demo.goharbor.io/yoda/moonlight:1.0.0
+~$ docker push demo.goharbor.io/meetup/moonlight:1.0.0
 
-The push refers to repository [demo.goharbor.io/yoda/moonlight]
+The push refers to repository [demo.goharbor.io/meetup/moonlight]
 b09314aec293: Pushed
 3.0.0: digest: sha256:eb6b7c17ba2ece109f5548e95a90a0b104bc44aeb1f8b30b9eafa2e5de1c420c size: 527
 ```
@@ -154,15 +154,15 @@ sha256:eb6b7c17ba2ece109f5548e95a90a0b104bc44aeb1f8b30b9eafa2e5de1c420c
 Sign the image
 
 ```bash
-~$ cosign sign --key cosign.key demo.goharbor.io/yoda/moonlight@${DIGESTS}
+~$ cosign sign --key cosign.key demo.goharbor.io/meetup/moonlight@${DIGESTS}
 
-WARNING: "demo.goharbor.io/yoda/moonlight" appears to be a private repository, please confirm uploading to the transparency log at "https://rekor.sigstore.dev"
+WARNING: "demo.goharbor.io/meetup/moonlight" appears to be a private repository, please confirm uploading to the transparency log at "https://rekor.sigstore.dev"
 Are you sure you would like to continue? [y/N] y
 ...
 
 Are you sure you would like to continue? [y/N] y
 tlog entry created with index: 72407934
-Pushing signature to: demo.goharbor.io/yoda/moonlight
+Pushing signature to: demo.goharbor.io/meetup/moonlight
 
 ```
 
@@ -173,15 +173,15 @@ your email or you can get the `tlog` index from the output of the `cosign sign` 
 Lets build an image with vulnerable software. We will use Dockerfile-vuln
 
 ```bash
-~$ docker build -f Dockerfile-vuln -t demo.goharbor.io/yoda/moonlight-vuln:2.0.0 .
+~$ docker build -f Dockerfile-vuln -t demo.goharbor.io/meetup/moonlight-vuln:2.0.0 .
 ```
 
 
 Push the images to your project in Harbor.
 
 ```
-~$ docker push demo.goharbor.io/yoda/moonlight:1.0.0
-~$ docker push demo.goharbor.io/yoda/moonlight-vuln:2.0.0
+~$ docker push demo.goharbor.io/meetup/moonlight:1.0.0
+~$ docker push demo.goharbor.io/meetup/moonlight-vuln:2.0.0
 
 
 
@@ -299,7 +299,7 @@ spec:
             kinds:
               - Pod
       verifyImages:
-      - image: "demo.goharbor.io/yoda/*" # yoda is our project name
+      - image: "demo.goharbor.io/meetup/*" # meetup is our project name
         key: |-
             name: cosign-public-key # This is the configmap we created earlier
             namespace: kyverno
@@ -350,5 +350,5 @@ metadata:
   name: pod-not-signed
 spec:
   containers:
-  - image: demo.goharbor.io/yoda/moonlight-not-signed:2.0.0
+  - image: demo.goharbor.io/meetup/moonlight-not-signed:2.0.0
     name: pod-not-signed
