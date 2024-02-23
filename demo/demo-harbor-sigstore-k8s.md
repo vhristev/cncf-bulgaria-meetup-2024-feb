@@ -2,16 +2,16 @@
 
 ## 0. Pre-requisites
 
-### 0.1 Create Virtual Machine
+### 0.1 Clone repo
 
-Lets clone the repo with all the necessary files:
+Lets clone the repo with all the necessary files
 
 ```bash
 ~$ git clone https://github.com/vhristev/cncf-bulgaria-meetup-2024-feb.git
 Cloning into 'cncf-bulgaria-meetup-2024-feb'...
 ```
 
-Lets move the demo directory
+Lets move the demo directory to our home directory and change to it.
 
 ```bash
 ~$ mv cncf-bulgaria-meetup-2024-feb/demo/ .
@@ -19,13 +19,6 @@ Lets move the demo directory
 ~/demo$
 ```
 
-Small VIM optimization
-
-```bash
-$ echo "set number" >> ~/.vimrc
-$ echo "set paste" >> ~/.vimrc
-```
-```
 
 ### 0.2 Create Virtual Machine
 
@@ -37,8 +30,8 @@ We will use Amazon EC2 instance but here is a pure vanilla `Vagrantfile` file th
 ```bash
 ~/ demo$ vagrant up
 Bringing machine 'default' up with 'vmware_desktop' provider...
-==> default: Cloning VMware VM: 'hajowieland/ubuntu-jammy-arm'. This can take some time...
-==> default: Checking if box 'hajowieland/ubuntu-jammy-arm' version '1.0.0' is up to date...
+==> default: Cloning VMware VM: 'bento/ubuntu-22.04'. This can take some time...
+==> default: Checking if box 'bento/ubuntu-22.04' version '1.0.0' is up to date...
 ==> default: Verifying vmnet devices are healthy...
 ==> default: Preparing network adapters...
 ==> default: Starting the VMware VM...
@@ -51,11 +44,22 @@ Bringing machine 'default' up with 'vmware_desktop' provider...
 SNIP ....
 SNIP ....
 ==> default: Enabling and configuring shared folders...
-    default: -- /Users/vhristev/Documents/gitlab_home/vagrant/rxm-labvm: /vagran
+```
 
+Now we have our linux machine lets ssh inside it. With `vagrat` is very simple just use the command below:
+
+```bash
+~/demo$ vagrant ssh
 ```
 
 ### Install Cosign
+
+Small VIM optimization
+
+```bash
+$ echo "set number" >> ~/.vimrc
+$ echo "set paste" >> ~/.vimrc
+```
 
 We will install `cosign` which is a tool for signing and verifying container images. We will use it to sign our images.
 
@@ -67,7 +71,47 @@ curl -O -L "https://github.com/sigstore/cosign/releases/latest/download/cosign_$
 sudo dpkg -i cosign_${LATEST_VERSION}_${ARCH}.deb
 ```
 
-### Demo Harbor account
+### Install Kubernetes
+
+In our demo we started with Harbor but to build and image we need `Docker`. Our automated `Kubernetes` installation script
+will also install `Docker` for us. That's why we will start with installation of `Kubernetes` and jump to our Harbor demo.
+
+```
+~/demo$ wget -qO - https://raw.githubusercontent.com/RX-M/classfiles/master/k8s.sh | sh
+```
+
+Lets add our user to the docker group so we don't use `sudo` all the time.
+
+```bash
+~/demo$ sudo usermod -aG docker $(whoami)
+~/demo$ newgrp docker
+```
+
+If you like auto-completion, don't forget this which will do two things.
+
+- Add the completion script to your `.bashrc` file
+- Add an alias for `kubectl` to `k` ( optional ). If you don't want to use 'k'
+    just use the full command `kubectl`.
+
+```
+echo "source <(kubectl completion bash)" >> ~/.bashrc
+echo "alias k=kubectl" >> ~/.bashrc
+echo "complete -F __start_kubectl k" >> ~/.bashrc
+source ~/.bashrc
+```
+
+Lets verify the installation:
+
+```bash
+~/demo$ k get nodes
+NAME     STATUS   ROLES           AGE     VERSION
+ubuntu   Ready    control-plane   3m49s   v1.29.2
+
+```
+
+Everything looks good lets continue
+
+### Demo Harbor
 
 We will use the official https://demo.goharbor.io/ from [official doc](https://goharbor.io/docs/1.10/install-config/demo-server/) you can find that __The demo server is cleaned and reset every two days.__
 
@@ -75,9 +119,10 @@ Lets create an account
 
 https://demo.goharbor.io/
 
-Click on Sign Up and fill the form there is no need of verification. Just use the user and the password you have entered.
+Click on `Sign Up` and fill the form there is no need of verification. For our demo we will setup a user `meetup` and a
+password `Meetup12`
 
-Create a new project and name it whatever you want. We will name ours `meetup`
+Create a new project and name it whatever you want. For our demo we use `meetup` ( same as the account name )
 
 #### Login to the Harbor
 
@@ -139,6 +184,12 @@ Private key written to cosign.key
 Public key written to cosign.pub
 ```
 
+Tags are immutable and they point to specific commit. You cannot change the tag to point to a different commit. The
+problem is you can delete and create a new tag with the same name and point to a different commit. This is why we will
+use the image digest to sign the image. The digest is a sha256 hash of the image and it is unique for each image. You
+cannot change the digest of an image. That is why we will use the digest to sign the image.
+
+
 We will get the image digest and store it in a variable for later use.
 
 ```bash
@@ -146,7 +197,7 @@ We will get the image digest and store it in a variable for later use.
 ~/demo$ echo $DIGESTS
 sha256:eb6b7c17ba2ece109f5548e95a90a0b104bc44aeb1f8b30b9eafa2e5de1c420c
 ```
-Sign the image
+Sign the image using the `cosign` private key we generated earlier.
 
 ```bash
 ~/demo$ cosign sign --key cosign.key demo.goharbor.io/meetup/moonlight@${DIGESTS}
@@ -161,8 +212,10 @@ Pushing signature to: demo.goharbor.io/meetup/moonlight
 
 ```
 
-If you wan to check our your signing we can check `Rekor` at [Search Rekor](http://search.sigstore.dev). Now you can use
-your email or you can get the `tlog` index from the output of the `cosign sign` command.
+If you wan to check our your signing we can open `Rekor` at [Search Rekor](http://search.sigstore.dev). Now we can use
+your email or you can get the `tlog` index from the output of the `cosign sign` command. In our case that is `72407934`.
+Go ahead try it out get the index and put it in the search bar just change the attribute to `tlog` and you will see the
+the signature.
 
 
 Lets build an image with vulnerable software. We will use `Dockerfile-vuln` which use older `alpine` image which is
@@ -179,47 +232,17 @@ Push the images to your project in Harbor.
 Pushing image to demo.goharbor.io/meetup/moonlight-vuln:1.0.0
 ```
 
+In our demo we showed you how you can go to `Harbor` project settings and:
 
+![harbor](images/project-configuration.png)
 
-### Install Kubernetes
+- Keep the registry private or make it public
+- Allow only signed images to be pulled with `cosign` or `Notation` a.k.a. `notary`
+- Prevent vulnerable images from being pulled and we can set the severity level of the vulnerabilities that we want to
+  prevent from being pulled.
+- Automatically scan images on push
 
-We will use a script to install Kubernetes because its not the focus of our lecture. The script will also install
-`Docker` which we will use to build our images.
-
-```
-~/demo$ wget -qO - https://raw.githubusercontent.com/RX-M/classfiles/master/k8s.sh | sh
-```
-
-Lets add our user to the docker group so we don't use `sudo` all the time.
-
-```bash
-~/demo$ sudo usermod -aG docker $(whoami)
-~/demo$ newgrp docker
-```
-
-If you like auto-completion, don't forget this which will do two things.
-
-- Add the completion script to your `.bashrc` file
-- Add an alias for `kubectl` to `k` ( optional ). If you don't want to use 'k'
-    just use the full command `kubectl`.
-
-```
-echo "source <(kubectl completion bash)" >> ~/.bashrc
-echo "alias k=kubectl" >> ~/.bashrc
-echo "complete -F __start_kubectl k" >> ~/.bashrc
-source ~/.bashrc
-```
-
-Lets verify the installation:
-
-```bash
-~/demo$ k get nodes
-NAME     STATUS   ROLES           AGE     VERSION
-ubuntu   Ready    control-plane   3m49s   v1.29.2
-
-```
-
-Everything looks good lets continue
+All set now its time to install `Kubernetes` and `Helm` and `Kyverno` and use them to enforce policies from `Kubernetes`
 
 ### Install helm
 
@@ -268,10 +291,12 @@ Good, everything looks good.
 
 ### Kyverno policies
 
-Lets create our first policy. We will use `kyverno` to enforce that all images are signed.
-`Kyverno` will use `cosign` public key to verify the signature of the images.
+We will use `kyverno` to enforce that all images are signed. `Kyverno` will use `cosign` public key to verify the
+signature of the images.
 
-We need to get the `cosign.pub` key which we will add in our policy.
+We need to get the `cosign.pub` key which we will add in our policy. In production we keep our secrets in `KMS ( Key
+Management Service )` like Hashicorp Vault, AWS KMS, Azure Key Vault, Google Cloud KMS etc. For our demo we keep it
+simple.
 
 ```bash
 ~/demo$ cat cosign.pub
@@ -281,14 +306,8 @@ lzgDNilMRKqg94/dGc8cYAmSQNa6i2AoQWueXUWSG6+SkdL2nT0NkgH1hw==
 -----END PUBLIC KEY-----
 ```
 
-Create our working directory
-
-```bash
-~/demo$ mkdir ~/kyverno && cd $_
-
-```
-
-Here is our policy
+Here is our policy. Don't forget to replace `demo.goharbor.io/meetup/*` with your project name and `cosign.pub` key with
+the one you generated earlier.
 
 ```bash
 ~demo$ vim kp.yaml && cat $_
@@ -309,22 +328,22 @@ spec:
             kinds:
               - Pod
       verifyImages:
-      - image: "demo.goharbor.io/meetup/*" # meetup is our project name
-        key: |- # This is our cosign.pub key
+      - image: "demo.goharbor.io/meetup/*" # 'meetup' is our project name
+        key: |- # This is our cosign.pub key we generated earlier
           -----BEGIN PUBLIC KEY-----
           MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEsYce/B39gE5focMAnDWf5saXsvzh
           lzgDNilMRKqg94/dGc8cYAmSQNa6i2AoQWueXUWSG6+SkdL2nT0NkgH1hw==
           -----END PUBLIC KEY-----
 ```
 
-Create the policy
+Apply the policy into the cluster.
 
 ```bash
 ~$ k apply -f kp.yaml
 clusterpolicy.kyverno.io/verify-image-signature created
 ```
 
-Verify the policy
+I don't trust myself that's why I always verify what I'm doing. Here is a verification step.
 
 ```bash
 ~$ k get clusterpolicy -n kyverno
@@ -332,9 +351,9 @@ NAME                     ADMISSION   BACKGROUND   VALIDATE ACTION   READY   AGE 
 verify-image-signature   true        false        Enforce           True    34s   Ready
 ```
 
-You can use `kubectl describe` for full details.
+You can use `kubectl describe` for full details
 
-```
+```bash
 ~$ k describe clusterpolicy -n kyverno
 Name:         verify-image-signature
 Namespace:
@@ -350,7 +369,10 @@ Metadata:
 
 ```
 
-Lets create a pod that will violate our policy
+It's time to create a pod that will violate our policy. Why ? Because we will use an unsigned image.
+If you remember we created two images`moonlight` and `moonlight-vuln`. The first one is signed and the second one is
+not signed. We will use the second one to violate our policy. The vulnerabilities does not matter for now.
+
 
 ```bash
 ~/kyverno$ vim pod.yaml && cat $_
@@ -364,7 +386,7 @@ metadata:
   name: pod-not-signed
 spec:
   containers:
-  - image: demo.goharbor.io/meetup/moonlight:1.0.0
+  - image: demo.goharbor.io/meetup/moonlight-vuln:1.0.0
     name: pod-not-signed
 ```
 
@@ -382,6 +404,7 @@ verify-image-signature:
 ```
 
 As you can see our image was not signed and the pod was not created. Lets try with a signed image.
+Now we will use the `moonlight` image which is signed.
 
 ```bash
 ~/kyverno$ vim pod-signed.yaml && cat $_
@@ -395,11 +418,11 @@ metadata:
   name: pod-not-signed
 spec:
   containers:
-  - image: demo.goharbor.io/meetup/moonlight:2.0.0
+  - image: demo.goharbor.io/meetup/moonlight:1.0.0
     name: pod-signed
 ```
 
-`moonlight` image is the signed one ,so lets see what is going to happen.
+Now we can try to create our pod and see what actually happens.
 
 ```bash
 ~/kyverno$ k apply -f pod-signed.yaml
@@ -409,21 +432,19 @@ NAME             READY   STATUS    RESTARTS   AGE
 pod-signed   1/1     Running   0          5s
 ```
 
-As you can see the pod was created successfully. That is how easy it is to enforce policies with `kyverno` and `cosign`.
-Now we can be sure that our running pods are using only signed images.
+As you can see the pod was created successfully. That is how easy it is to enforce policies with `kyverno`. Now we can
+be sure that our running pods are using only signed images.
 
-## Scanner with trivy
+## Run only scan images
 
+In this section of the demo we will create a new policy which will enforce that all images are scanned. That way we will
+be sure that our images are scanned before they are used. We can elaborate here discuss the severity because the policy
+will not save you from running image with `critical` vulnerabilities.
 
-### Install trivy
+We assume here that you enable the `Harbor` feature to scan images on push. That mean's that every time you push an
+image `Harbor` will scan it using `Trivy` ( or other scanner you configured ) and will provide a result.
 
-```bash
-sudo apt-get install wget apt-transport-https gnupg lsb-release
-wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | gpg --dearmor | sudo tee /usr/share/keyrings/trivy.gpg > /dev/null
-echo "deb [signed-by=/usr/share/keyrings/trivy.gpg] https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main" | sudo tee -a /etc/apt/sources.list.d/trivy.list
-sudo apt-get update
-sudo apt-get install trivy
-```
+![harbor](images/harbor-scan.png)
 
 ### Kyverno policy for scan check
 
@@ -470,7 +491,7 @@ spec:
                   -----END PUBLIC KEY-----
 ```
 
-Test with pod
+Test with pod.
 
 ```bash
 ~/kyverno$ vim pod-scan.yaml && cat $_
@@ -492,12 +513,31 @@ spec:
 ~/kyverno$ k apply -f pod-scan.yaml
 ```
 
-and it fails
+The pod fails to start because it violates the policy. The image was not scanned and the scan is older than 12 hours.
 
+But what happen `Harbor` actually scan the image the report is there why the pod fails to start. The reason is that the
+Harbor does not put the scan report in the `metadata` of the image. This is an upcoming feature in `Harbor` which when
+its in `GA` we can use the scanning report as attestations for our image and then Admission controller like `Kyverno` can
+use it for enforcing policies.
+
+What is the solution? We can use `cosign` to attach the scan report to the image.
+
+
+### Install trivy
+
+We will use `trivy` to scan our images. `Trivy` is a simple and comprehensive vulnerability scanner for containers.
+
+```bash
+sudo apt-get install wget apt-transport-https gnupg lsb-release
+wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | gpg --dearmor | sudo tee /usr/share/keyrings/trivy.gpg > /dev/null
+echo "deb [signed-by=/usr/share/keyrings/trivy.gpg] https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main" | sudo tee -a /etc/apt/sources.list.d/trivy.list
+sudo apt-get update
+sudo apt-get install trivy
+```
 ### Trivy scan image
 
 
-With `Trivy` we will scan our image:
+With `Trivy` to scan  our image and save the report in a file.
 
 ```bash
 ~/kyverno$  trivy image --ignore-unfixed --format cosign-vuln --output scan.json demo.goharbor.io/meetup/moonlight:1.0.0
@@ -506,32 +546,25 @@ With `Trivy` we will scan our image:
 - --ignore-unfixed: Ensures only the vulnerabilities, which have a already a fix available, are displayed
 - --output scan.json: The scan output is saved to a scan.json file instead of being displayed in the terminal.
 
-### Attack attestation to the image
+### Attach attestation to the image
+
+This is where `cosign` comes in. We will use `cosign` to attach the scan report to the image. As you can see we use the
+`attest` command to attach the scan report to the image. We use the `cosign.key` which is our private key that we
+generate earlier to sign the image. This will automatically upload that to the image registry in our case `Harbor`.
 
 ```bash
 ~/kyverno$ cosign attest --key cosign.key --predicate scan.json --type vuln demo.goharbor.io/meetup/moonlight:1.0.0
 ```
 
+Now our `trivy` report is attached to the image as attestations.
 
-Test with a pod
+Lets try to create the    pod again. As you can see we will not touch the yaml file. We will use the same file that we used
+in the previous step. The only difference is that now the image is scanned from our computer and the report is glued to
+the image.
 
-```bash
-~/kyverno$ vim pod-scan.yaml && cat $_
-```
-```yaml
-apiVersion: v1
-kind: Pod
-metadata:
-  labels:
-    run: pod-scanned
-  name: pod-scanned
-spec:
-  containers:
-  - image: demo.goharbor.io/meetup/moonlight:1.0.0
-    name: pod-scanned
-```
+In prod we do that in our CICD we sign, scan and attach the scan report to the image. Now its time to try to run the pod
+again.
 
-As you can see the pod can run now because the image was scanned and the scan is not older than 12 hours.
 
 ```bash
 :~/kuverno$ k apply -f pod.yaml
@@ -541,7 +574,18 @@ NAME             READY   STATUS    RESTARTS        AGE
 pod-scanned   1/1     Running   3 (9m58s ago)   60m
 ```
 
+As you can see the pod was created successfully. That is how easy it is to enforce policies with `kyverno`.
+
+At the end we have two policies:
+
+- A policy to enforce that all images are signed
+- A policy to enforce that all images are scanned and the scan is not older than 12 hours
+
+Before an image can run in our `Kubernetes` cluster it must be `signed` and `scanned` both of them. This is how we can
+use Admission controllers to enforce our corporate policies.
+
 Thank you.
 
-@Valentin Hristev
-@Orlin Vasilev
+@Valentin Hristev - https://www.linkedin.com/in/valentin-hristev/
+@Orlin Vasilev - https://www.linkedin.com/in/orlinvasilev/
+github: https://github.com/cncf-bulgaria/meetups
