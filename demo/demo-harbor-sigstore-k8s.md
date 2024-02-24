@@ -124,6 +124,7 @@ password `Meetup12`
 
 Create a new project and name it whatever you want. For our demo we use `meetup` ( same as the account name )
 
+
 #### Login to the Harbor
 
 We will use our account name `meetup` and password `Meetup12`
@@ -193,7 +194,7 @@ cannot change the digest of an image. That is why we will use the digest to sign
 We will get the image digest and store it in a variable for later use.
 
 ```bash
-~/demo$ DIGESTS=`docker images --digests | grep 1.0.0 | awk '{print $3}'`
+~/demo$ DIGESTS=`docker images --digests | grep moonlight | grep 1.0.0 | awk '{print $3}'`
 ~/demo$ echo $DIGESTS
 sha256:eb6b7c17ba2ece109f5548e95a90a0b104bc44aeb1f8b30b9eafa2e5de1c420c
 ```
@@ -373,6 +374,14 @@ It's time to create a pod that will violate our policy. Why ? Because we will us
 If you remember we created two images`moonlight` and `moonlight-vuln`. The first one is signed and the second one is
 not signed. We will use the second one to violate our policy. The vulnerabilities does not matter for now.
 
+### Harbor public project
+
+Please make sure the project is public. You can do that from the `Harbor` UI.
+
+![harbor](images/harbor-public.png)
+
+Now we are sure that `kyverno` can pull the image from the `Harbor` registry. We can create a pod with the `moonlight`
+
 
 ```bash
 ~/kyverno$ vim pod.yaml && cat $_
@@ -389,6 +398,8 @@ spec:
   - image: demo.goharbor.io/meetup/moonlight-vuln:1.0.0
     name: pod-not-signed
 ```
+
+#### Create the pod
 
 Now we can try to create our pod and see what actually happens.
 
@@ -489,6 +500,14 @@ spec:
                   MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEsYce/B39gE5focMAnDWf5saXsvzh
                   lzgDNilMRKqg94/dGc8cYAmSQNa6i2AoQWueXUWSG6+SkdL2nT0NkgH1hw==
                   -----END PUBLIC KEY-----
+```
+
+#### Apply the policy
+
+Lets apply the scanning `kyverno` policy.
+
+```bash
+~/kyverno$ k apply -f kp-trivy.yaml
 ```
 
 Test with pod.
